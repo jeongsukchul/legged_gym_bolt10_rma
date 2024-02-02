@@ -30,12 +30,13 @@
 
 from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobotCfgPPO
 
+rma = True
 class Bolt10Cfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env):
         num_envs = 4096 # robot count 4096
-        num_observations = 42
+        num_observations = 39
         '''
-        self.base_lin_vel:  torch.Size([4096, 3])
+        self.base_lin_vel:  torch.Size([4096, 3]) --!
         self.base_ang_vel:  torch.Size([4096, 3])
         self.projected_gravity:  torch.Size([4096, 3])
         self.commands[:, :3]:  torch.Size([4096, 3])
@@ -43,16 +44,33 @@ class Bolt10Cfg( LeggedRobotCfg ):
         self.dof_vel:  torch.Size([4096, 6])
         self.actions:  torch.Size([4096, 6])
 
-        3 + 3 + 3 + 3 + 10 + 10 + 10 = 42(num_observation)
+        --!3 + 3 + 3 + 3 + 10 + 10 + 10 = 39(num_observation)
         '''
-        num_privileged_obs = None # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
+        if rma == True:
+            num_privileged_obs = 98 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
+        else :
+            num_privileged_obs = None
+        """
+
+        self.mass_com- self.base_pos,#3
+        self.friction,               #1
+        feet_contact_forces,         #2
+        feet_contact,                #2
+        self.ext_forces.reshape((self.num_envs,-1)), #link 11* 3 = 33
+        self.ext_torques.reshape((self.num_envs,-1)) #same 33
+        self.privileged_obs_buf = torch.cat((self.privileged_obs_buf,heights),dim=-1) #25 (5x5)
+
+        3+1+1+1+33+33+25 = 98 (num_privileged_observation)
+        """
+        # add noise if needed
         num_actions = 10 # robot actuation
         env_spacing = 3.  # not used with heightfields/trimeshes 
         send_timeouts = True # send time out information to the algorithm
         episode_length_s = 10 # episode length in seconds
 
     class terrain( LeggedRobotCfg.terrain):
-        mesh_type = 'trimesh' # "heightfield" # none, plane, heightfield or trimesh
+        mesh_type = 'trimesh' # "heightfield" # none, plane, heightfield or trimesh 
+        # the height of stair is in the legged_gym/utils/terrain.py with variable name "step height"
         horizontal_scale = 0.1 # [m]
         vertical_scale = 0.002 # [m]
         border_size = 25 # [m]
@@ -62,8 +80,10 @@ class Bolt10Cfg( LeggedRobotCfg ):
         restitution = 0.
         # rough terrain only:
         measure_heights = False
-        measured_points_x = [-0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8] # 1mx1.6m rectangle (without center line)
-        measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]
+        if rma==True:
+            measure_heights = True
+        measured_points_x = [-0.2, -0.1, 0., 0.1, 0.2] # 1mx1.6m rectangle (without center line)
+        measured_points_y = [-0.2, -0.1, 0., 0.1, 0.2]
         selected = False # select a unique terrain type and pass all arguments
         terrain_kwargs = None # Dict of arguments for selected terrain
         max_init_terrain_level = 5 # starting curriculum state
@@ -78,7 +98,7 @@ class Bolt10Cfg( LeggedRobotCfg ):
 
     class commands( LeggedRobotCfg.commands):
         curriculum = True
-        max_curriculum = 3.0
+        max_curriculum = 2.
         num_commands = 3 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 5. # time before command are changed[s]
         heading_command = False # if true: compute ang vel command from heading error
@@ -149,7 +169,7 @@ class Bolt10Cfg( LeggedRobotCfg ):
         foot_name = 'Foot'
         penalize_contacts_on = []
         # penalize_contacts_on = ['bolt_lower_leg_right_side', 'bolt_body', 'bolt_hip_fe_left_side', 'bolt_hip_fe_right_side', ' bolt_lower_leg_left_side', 'bolt_shoulder_fe_left_side', 'bolt_shoulder_fe_right_side', 'bolt_trunk', 'bolt_upper_leg_left_side', 'bolt_upper_leg_right_side']
-        terminate_after_contacts_on = ['base_link', 'L_HipRoll_Link', 'L_HipPitch_Link', 'R_HipRoll_Link', 'R_HipPitch_Link', 'Upper_Leg', 'base_link']
+        terminate_after_contacts_on = ['base_link', 'L_HipRoll_Link', 'L_HipPitch_Link', 'R_HipRoll_Link', 'R_HipPitch_Link', 'Upper_Leg']
         
         
         disable_gravity = False
@@ -172,34 +192,88 @@ class Bolt10Cfg( LeggedRobotCfg ):
     class domain_rand:
         randomize_friction = True
         friction_range = [0.5, 1.25]
+        
+        randomize_joint_friction = True
+        dof_friction = [0, 0.03]
+        dof_damping = [0, 0.003]
+
         randomize_base_mass = True
-        added_mass_range = [-.5, .5]
+        added_mass_range = [-.2, .2]
+
         push_robots = True
         push_interval_s = 3
         max_push_vel_xy = 1.
 
+        ext_force_robots = True
+        ext_force_vector_6d_range = [[-30,30], [-30,30], [-30,30], [-5,5], [-5,5], [-5,5]]
+        ext_force_interval = 5.0
+        ext_force_duration = 4
+
 
     class rewards( LeggedRobotCfg.rewards ):
-        soft_dof_pos_limit = 0.95
+        soft_dof_pos_limit = 0.9
         soft_dof_vel_limit = 0.9
         soft_torque_limit = 0.9
         max_contact_force = 20.
         only_positive_rewards = False
+
+        tracking_sigma = 0.5 # tracking reward = exp(-error^2/sigma)
+        orientation_sigma = 0.25 # tracking reward = exp(-error^2/sigma)
+        # energy_sigma = 1e3
+        action_rate_sigma = 1
+
+        base_height_target = 0.5 # 0.43 for default position of bolt6
         class scales( LeggedRobotCfg.rewards.scales ):
             termination = -100.
-            tracking_ang_vel = 1.0
-            torques = -5.e-6 #-5.e-7
-            dof_acc = -2.e-7 # -2.e-7
-            lin_vel_z = -0.5
-            feet_air_time = 5. # 5.
-            dof_pos_limits = -1.    # -1.
-            no_fly = 1. # .25
-            dof_vel = -0.0
-            ang_vel_xy = -0.
-            feet_contact_forces = -1.e-2 # -1.e-3
+
+            #tracking 
             tracking_lin_vel = 10.
-            feet_outwards = -5.
-            joint_power = -1.e-1 # -5.e-2
+            tracking_ang_vel = 5.
+
+            #regularization in task-sapce
+            lin_vel_z = -0.0
+            ang_vel_xy = -0.
+
+            # regulation in joint space
+            #energy
+            torques = -5.e-7# -5.e-7
+            dof_vel = -0.0
+            dof_acc = -2.e-7 # -2.e-7
+            action_rate = -1.e-4
+
+            # walking specific rewards
+            feet_air_time = 0. # 5.
+            stand_still = 0.0
+            #feet_stumble
+            collision =0.
+            no_fly = 0. # .25
+            feet_contact_forces = -1.e-3 #-1.e-3
+            
+            #feet_outwards = -5.
+            
+            #joint limits
+            dof_pos_limits = -10  # -1.
+            dof_vel_limits = 0
+            torque_limits = -0.01
+            # joint_power = -1.e-2 # -5.e-2
+            
+            # DRS
+            orientation = 0.0 # Rui
+            base_height = 0.0
+            joint_regularization = 0.0
+            ankle_joint_regularization= 0.0
+            # PBRS rewards
+            ori_pb = 5.0
+            baseHeight_pb = 2.0
+            jointReg_pb = 2.0
+            ankle_jointReg_pb = 0.0
+            # energy_pb = 1.0
+            action_rate_pb = 0.0
+
+            stand_still_pb = 1.0
+            no_fly_pb = 4.0
+            feet_air_time_pb = 2.5
+
 
     class normalization:
         class obs_scales:
@@ -212,7 +286,7 @@ class Bolt10Cfg( LeggedRobotCfg ):
         clip_actions = 44.
 
     class noise:
-        add_noise = False
+        add_noise = True
         noise_level = 1.0 # scales other values
         class noise_scales:
             dof_pos = 0.005
@@ -251,7 +325,10 @@ class Bolt10Cfg( LeggedRobotCfg ):
 
 class Bolt10CfgPPO( LeggedRobotCfgPPO ):
     seed = 1
-    runner_class_name = 'OnPolicyRunnerSym'
+    if rma == True:
+        runner_class_name = 'OnPolicyRunnerRMA'
+    else:
+        runner_class_name = 'OnPolicyRunnerSym'
     class policy:
         init_noise_std = 1.0
         actor_hidden_dims = [512, 256, 128]
@@ -283,13 +360,19 @@ class Bolt10CfgPPO( LeggedRobotCfgPPO ):
                         } # Joint pairs that need to be mirrored
         mirror_neg = {'HipYaw': (0,5), 'HipRoll': (1,6), } # Joint pairs that need to be mirrored and signs must be changed
         mirror_weight = 0.5
-        no_mirror = 3*4 # number of elements in the obs vector that do not need mirroring. They must be placed in the front of the obs vector
+        no_mirror = 3*3 # number of elements in the obs vector that do not need mirroring. They must be placed in the front of the obs vector
         
     class runner( LeggedRobotCfgPPO.runner ):
-        policy_class_name = 'ActorCritic'
-        algorithm_class_name = 'PPO_sym'
+        if rma==True:
+            policy_class_name = 'ActorCriticLatent'
+        else:
+            policy_class_name = 'ActorCritic'
+        if rma == True:
+            algorithm_class_name = 'PPO_priv'
+        else :
+            algorithm_class_name = 'PPO_sym'
         num_steps_per_env = 24 # per iteration
-        max_iterations = 5000 # number of policy updates
+        max_iterations = 10000 # number of policy updates
 
         # logging
         save_interval = 100 # check for potential saves every this many iterations

@@ -58,5 +58,4 @@ task_registry.register( "cassie", Cassie, CassieRoughCfg(), CassieRoughCfgPPO() 
 
 task_registry.register("jet_rough", Jet, JetRoughCfg(), JetRoughCfgPPO())
 task_registry.register("jet_flat", Jet, JetFlatCfg(), JetFlatCfgPPO())
-
 task_registry.register("bolt10", Bolt10, Bolt10Cfg(), Bolt10CfgPPO())

@@ -215,7 +215,7 @@
     <!-- joints rotates around the y-axis -->
     <axis xyz="0 1 0"/>
     <!-- Limits -->
-    <limit effort="3.5" lower="-1.50" upper="1.50" velocity="50"/>
+    <limit effort="3.5" lower="-1.0" upper="1.50" velocity="50"/>
     <!-- pybullet simulation parameters -->
     <dynamics damping="0.0" friction="0.0"/>
   </joint>
@@ -480,7 +480,7 @@
     <!-- joints rotates around the y-axis -->
     <axis xyz="0 1 0"/>
     <!-- Limits (usefull?) -->
-    <limit effort="3.5" lower="-1.50" upper="1.50" velocity="50"/>
+    <limit effort="3.5" lower="-1.00" upper="1.50" velocity="50"/>
     <!-- pybullet simulation parameters -->
     <dynamics damping="0.0" friction="0.0"/>
   </joint>
