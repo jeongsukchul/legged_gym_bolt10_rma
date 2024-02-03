@@ -30,7 +30,8 @@
 
 from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobotCfgPPO
 
-rma = True
+rma = False
+rma_student = True
 class Bolt10Cfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env):
         num_envs = 4096 # robot count 4096
@@ -46,8 +47,8 @@ class Bolt10Cfg( LeggedRobotCfg ):
 
         --!3 + 3 + 3 + 3 + 10 + 10 + 10 = 39(num_observation)
         '''
-        if rma == True:
-            num_privileged_obs = 98 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
+        if rma == True or rma_student == True:
+            num_privileged_obs = 99 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
         else :
             num_privileged_obs = None
         """
@@ -207,7 +208,7 @@ class Bolt10Cfg( LeggedRobotCfg ):
         ext_force_robots = True
         ext_force_vector_6d_range = [[-30,30], [-30,30], [-30,30], [-5,5], [-5,5], [-5,5]]
         ext_force_interval = 5.0
-        ext_force_duration = 4
+        ext_force_duration = 0.2
 
 
     class rewards( LeggedRobotCfg.rewards ):
@@ -328,17 +329,26 @@ class Bolt10CfgPPO( LeggedRobotCfgPPO ):
     if rma == True:
         runner_class_name = 'OnPolicyRunnerRMA'
     else:
-        runner_class_name = 'OnPolicyRunnerSym'
+        if rma_student ==True:
+            runner_class_name ='OnPolicyRunnerDagger'
+            expert_runner_class_name = 'OnPolicyRunnerRMA'
+        else:
+            runner_class_name = 'OnPolicyRunnerSym'
     class policy:
         init_noise_std = 1.0
         actor_hidden_dims = [512, 256, 128]
         critic_hidden_dims = [512, 256, 128]
         activation = 'elu' # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
+        output_activation = 'tanh'
         # only for 'ActorCriticRecurrent':
         # rnn_type = 'lstm'
         # rnn_hidden_size = 512
         # rnn_num_layers = 1
-        
+
+    class mlp:
+        mlp_shape = [512, 256, 128]
+        activation = 'tanh'
+        output_activation = 'tanh',
     class algorithm( LeggedRobotCfgPPO.algorithm):
         # training params
         value_loss_coef = 1.0
@@ -361,7 +371,9 @@ class Bolt10CfgPPO( LeggedRobotCfgPPO ):
         mirror_neg = {'HipYaw': (0,5), 'HipRoll': (1,6), } # Joint pairs that need to be mirrored and signs must be changed
         mirror_weight = 0.5
         no_mirror = 3*3 # number of elements in the obs vector that do not need mirroring. They must be placed in the front of the obs vector
-        
+    # class dagger_algorithm(LeggedRobotCfgPPO.algorithm):
+    #     schedule = 'adaptive'
+    #     learning_rate = 1.e-3
     class runner( LeggedRobotCfgPPO.runner ):
         if rma==True:
             policy_class_name = 'ActorCriticLatent'
@@ -376,12 +388,36 @@ class Bolt10CfgPPO( LeggedRobotCfgPPO ):
 
         # logging
         save_interval = 100 # check for potential saves every this many iterations
-        experiment_name = 'bolt10'
-        run_name = 'bolt10'
+        
+        if rma==True:
+            experiment_name = 'bolt10_rma'
+            run_name = 'bolt10_rma'
+        else:
+            experiment_name = 'bolt10'
+            run_name = 'bolt10'
         # load and resume
         resume = False
         load_run = -1 # -1 = last run
         checkpoint = -1 # -1 = last saved model
         resume_path = None # updated from load_run and chkpt
         # symmetric loss
+    class dagger( LeggedRobotCfgPPO.runner ):
+        expert_policy_class = 'DAggerExpert'
+        student_policy_class = 'DAggerAgent'
+
+        algorithm_class_name='DAggerTrainer'
+
+        num_steps_per_env = 24
+        max_iterations = 1000
+        history_len = 50
+        # logging
+        save_interval = 100
+        experiment_name = 'bolt10_dagger'
+        run_name = 'bolt10_dagger'
+
+        # load and resume
+        resume = False
+        load_run = -1 # -1 = last run
+        checkpoint = -1 # -1 = last saved model
+        resume_path = None # updated from load_run and chkpt
         

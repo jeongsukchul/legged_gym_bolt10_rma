@@ -138,13 +138,23 @@ class TaskRegistry():
         if log_root=="default":
             log_root = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.experiment_name)
             log_dir = os.path.join(log_root, datetime.now().strftime('%b%d_%H-%M-%S') + '_' + train_cfg.runner.run_name)
+        elif log_root=='default' and train_cfg_dict['runner_class_name']=='OnPolicyRunnerRMA':
+            log_root = os.path.join(LEGGED_GYM_ROOT_DIR, 'expert', train_cfg.runner.experiment_name)
+            log_dir = os.path.join(log_root, datetime.now().strftime('%b%d_%H-%M-%S') + '_' + train_cfg.runner.run_name)
         elif log_root is None:
             log_dir = None # no logging
         else:
             log_dir = os.path.join(log_root, datetime.now().strftime('%b%d_%H-%M-%S') + '_' + train_cfg.runner.run_name)
         
         train_cfg_dict = class_to_dict(train_cfg)
-        runner = eval(train_cfg_dict['runner_class_name'])(env, train_cfg_dict, log_dir, device=args.rl_device)
+        if train_cfg_dict['runner_class_name']=='OnPolicyRunnerDagger':
+            policy_root = os.path.join(LEGGED_GYM_ROOT_DIR, 'expert', train_cfg.runner.experiment_name)
+            policy_path = get_load_path(policy_root, load_run=train_cfg.runner.load_run, checkpoint=train_cfg.runner.checkpoint)
+            expert_runner = eval(train_cfg_dict['expert_runner_class_name'])(env,train_cfg_dict, log_dir, devices=args.rl_drive).load(policy_path)
+            expert_policy = expert_runner.get_inference_policy(device=env.device)
+            runner = eval(train_cfg_dict['runner_class_name'])(env, expert_policy,train_cfg_dict, log_dir, device=args.rl_device)
+        else:
+            runner = eval(train_cfg_dict['runner_class_name'])(env, train_cfg_dict, log_dir, device=args.rl_device)
         # runner = OnPolicyRunner(env, train_cfg_dict, log_dir, device=args.rl_device) # this is the default from legged gym
         #save resume path before creating a new log_dir
         resume = train_cfg.runner.resume
