@@ -30,8 +30,8 @@
 
 from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobotCfgPPO
 
-rma = False
-rma_student = True
+rma =True
+rma_student = False
 class Bolt10Cfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env):
         num_envs = 4096 # robot count 4096
@@ -81,7 +81,7 @@ class Bolt10Cfg( LeggedRobotCfg ):
         restitution = 0.
         # rough terrain only:
         measure_heights = False
-        if rma==True:
+        if rma==True or rma_student==True:
             measure_heights = True
         measured_points_x = [-0.2, -0.1, 0., 0.1, 0.2] # 1mx1.6m rectangle (without center line)
         measured_points_y = [-0.2, -0.1, 0., 0.1, 0.2]
@@ -392,6 +392,10 @@ class Bolt10CfgPPO( LeggedRobotCfgPPO ):
         if rma==True:
             experiment_name = 'bolt10_rma'
             run_name = 'bolt10_rma'
+        elif rma_student==True:
+            expert_name = 'bolt10_rma'
+            experiment_name = 'bolt10_dagger'
+            run_name = 'bolt10_dagger'
         else:
             experiment_name = 'bolt10'
             run_name = 'bolt10'
