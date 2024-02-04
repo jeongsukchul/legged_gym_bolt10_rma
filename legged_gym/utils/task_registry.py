@@ -148,7 +148,7 @@ class TaskRegistry():
             policy_root = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.expert_name)
             policy_path = get_load_path(policy_root, load_run=train_cfg.runner.load_run, checkpoint=train_cfg.runner.checkpoint)
             expert_runner = eval(train_cfg_dict['expert_runner_class_name'])(env,train_cfg_dict, log_dir, devices=args.rl_drive).load(policy_path)
-            expert_policy = expert_runner.get_inference_policy(device=env.device)
+            expert_policy = expert_runner.alg.actor_critic.to(self.device)
             runner = eval(train_cfg_dict['runner_class_name'])(env, expert_policy,train_cfg_dict, log_dir, device=args.rl_device)
         else:
             runner = eval(train_cfg_dict['runner_class_name'])(env, train_cfg_dict, log_dir, device=args.rl_device)

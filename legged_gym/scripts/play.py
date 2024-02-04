@@ -33,7 +33,7 @@ import os
 
 import isaacgym
 from legged_gym.envs import *
-from legged_gym.utils import  get_args, export_policy_as_jit, task_registry, Logger
+from legged_gym.utils import  get_args, export_policy_as_jit, class_to_dict, task_registry, Logger
 
 import numpy as np
 import torch
@@ -51,21 +51,26 @@ def play(args):
     env_cfg.domain_rand.push_robots = True
     env_cfg.domain_rand.ext_force_robots = True
     env_cfg.domain_rand.randomize_joint_friction = True
+    env_cfg.env.episode_length_s = 20
     
     if args.speed is not None:
         env_cfg.commands.ranges.lin_vel_x = [args.speed, args.speed]
         env_cfg.commands.ranges.lin_vel_y = [0., 0.]
         env_cfg.commands.ranges.heading = [0.,0.]
         env_cfg.commands.ranges.ang_vel_yaw = [0.,0.]
+        # env_cfg.commands.num_commands = 4
+        # env_cfg.commands.heading_command = True        
 
     # prepare environment
     env, _ = task_registry.make_env(name=args.task, args=args, env_cfg=env_cfg)
     obs = env.get_observations()
-    if env_cfg.env.num_privileged_obs is not None:
+    train_cfg_dict = class_to_dict(train_cfg)
+    if env_cfg.env.num_privileged_obs is not None and train_cfg_dict['runner_class_name']=='OnPolicyRunnerRMA':
         priviledge_obs = env.get_privileged_observations()
         total_obs = torch.cat((obs,priviledge_obs),dim=1)
     else:
         total_obs = obs
+    print("total_obs", total_obs.shape)
     # load policy
     train_cfg.runner.resume = True
     ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=train_cfg) # env is reset here
@@ -89,7 +94,12 @@ def play(args):
 
     for i in range(10*int(env.max_episode_length)):
         actions = policy(total_obs.detach())
-        obs, _, rews, dones, infos = env.step(actions.detach())
+        obs, priviledge_obs, rews, dones, infos = env.step(actions.detach())
+        if env_cfg.env.num_privileged_obs is not None and train_cfg_dict['runner_class_name']=='OnPolicyRunnerRMA':
+            priviledge_obs = env.get_privileged_observations()
+            total_obs = torch.cat((obs,priviledge_obs),dim=1)
+        else:
+            total_obs = obs
         if RECORD_FRAMES:
             if i % 2:
                 filename = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.experiment_name, 'exported', 'frames', f"{img_idx}.png")

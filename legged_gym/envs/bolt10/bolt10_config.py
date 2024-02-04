@@ -30,7 +30,7 @@
 
 from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobotCfgPPO
 
-rma =False
+rma =True
 rma_student = False
 class Bolt10Cfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env):
@@ -339,7 +339,7 @@ class Bolt10CfgPPO( LeggedRobotCfgPPO ):
         actor_hidden_dims = [512, 256, 128]
         critic_hidden_dims = [512, 256, 128]
         activation = 'elu' # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
-        output_activation = 'tanh'
+        output_activation = 'elu'
         # only for 'ActorCriticRecurrent':
         # rnn_type = 'lstm'
         # rnn_hidden_size = 512
