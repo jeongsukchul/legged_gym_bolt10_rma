@@ -30,7 +30,7 @@
 
 from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobotCfgPPO
 
-rma =True
+rma =False
 rma_student = False
 class Bolt10Cfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env):
