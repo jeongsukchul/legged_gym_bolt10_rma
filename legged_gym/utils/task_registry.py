@@ -35,7 +35,7 @@ import torch
 import numpy as np
 
 from rsl_rl.env import VecEnv
-from rsl_rl.runners import OnPolicyRunner, OnPolicyRunnerSym,OnPolicyRunnerRMA
+from rsl_rl.runners import OnPolicyRunner, OnPolicyRunnerSym,OnPolicyRunnerRMA, OnPolicyRunnerDagger
 
 from legged_gym import LEGGED_GYM_ROOT_DIR, LEGGED_GYM_ENVS_DIR
 from .helpers import get_args, update_cfg_from_args, class_to_dict, get_load_path, set_seed, parse_sim_params
@@ -147,8 +147,10 @@ class TaskRegistry():
         if train_cfg_dict['runner_class_name']=='OnPolicyRunnerDagger':
             policy_root = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.expert_name)
             policy_path = get_load_path(policy_root, load_run=train_cfg.runner.load_run, checkpoint=train_cfg.runner.checkpoint)
-            expert_runner = eval(train_cfg_dict['expert_runner_class_name'])(env,train_cfg_dict, log_dir, devices=args.rl_drive).load(policy_path)
-            expert_policy = expert_runner.alg.actor_critic.to(self.device)
+            expert_runner = eval(train_cfg_dict['expert_runner_class_name'])(env,train_cfg_dict, log_dir, device=args.rl_device)
+            expert_runner.load(policy_path)
+            expert_policy = expert_runner.alg.actor_critic.actor.architecture.to(device=args.rl_device)
+            
             runner = eval(train_cfg_dict['runner_class_name'])(env, expert_policy,train_cfg_dict, log_dir, device=args.rl_device)
         else:
             runner = eval(train_cfg_dict['runner_class_name'])(env, train_cfg_dict, log_dir, device=args.rl_device)

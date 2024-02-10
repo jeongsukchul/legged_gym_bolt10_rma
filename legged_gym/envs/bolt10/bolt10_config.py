@@ -37,7 +37,7 @@ class Bolt10Cfg( LeggedRobotCfg ):
         num_envs = 4096 # robot count 4096
         num_observations = 39
         '''
-        self.base_lin_vel:  torch.Size([4096, 3]) --!
+        self.base_lin_vel:  torch.Size([4096, 3]) --! don't use
         self.base_ang_vel:  torch.Size([4096, 3])
         self.projected_gravity:  torch.Size([4096, 3])
         self.commands[:, :3]:  torch.Size([4096, 3])
@@ -45,23 +45,22 @@ class Bolt10Cfg( LeggedRobotCfg ):
         self.dof_vel:  torch.Size([4096, 6])
         self.actions:  torch.Size([4096, 6])
 
-        --!3 + 3 + 3 + 3 + 10 + 10 + 10 = 39(num_observation)
+        --!3 + ---- 3 + 3 + 3 + 10 + 10 + 10 = 39(num_observation)
         '''
         if rma == True or rma_student == True:
-            num_privileged_obs = 99 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
+            num_privileged_obs = 41 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
         else :
             num_privileged_obs = None
         """
-
+        self.base_lin_vel:  torch.Size([4096, 3]) #3
         self.mass_com- self.base_pos,#3
-        self.friction,               #1
         feet_contact_forces,         #2
         feet_contact,                #2
-        self.ext_forces.reshape((self.num_envs,-1)), #link 11* 3 = 33
-        self.ext_torques.reshape((self.num_envs,-1)) #same 33
+        self.ext_forces.reshape((self.num_envs,-1)), #3
+        self.ext_torques.reshape((self.num_envs,-1)) #3
         self.privileged_obs_buf = torch.cat((self.privileged_obs_buf,heights),dim=-1) #25 (5x5)
 
-        3+1+1+1+33+33+25 = 98 (num_privileged_observation)
+        3+3+2+2+3+3+25 = 41 (num_privileged_observation)
         """
         # add noise if needed
         num_actions = 10 # robot actuation
@@ -70,7 +69,7 @@ class Bolt10Cfg( LeggedRobotCfg ):
         episode_length_s = 10 # episode length in seconds
 
     class terrain( LeggedRobotCfg.terrain):
-        mesh_type = 'trimesh' # "heightfield" # none, plane, heightfield or trimesh 
+        mesh_type = 'plane' # "heightfield" # none, plane, heightfield or trimesh 
         # the height of stair is in the legged_gym/utils/terrain.py with variable name "step height"
         horizontal_scale = 0.1 # [m]
         vertical_scale = 0.002 # [m]
@@ -99,7 +98,7 @@ class Bolt10Cfg( LeggedRobotCfg ):
 
     class commands( LeggedRobotCfg.commands):
         curriculum = True
-        max_curriculum = 2.
+        max_curriculum = 3.
         num_commands = 3 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 5. # time before command are changed[s]
         heading_command = False # if true: compute ang vel command from heading error
@@ -191,23 +190,23 @@ class Bolt10Cfg( LeggedRobotCfg ):
         thickness = 0.01
 
     class domain_rand:
-        randomize_friction = True
+        randomize_friction = False
         friction_range = [0.5, 1.25]
         
-        randomize_joint_friction = True
+        randomize_joint_friction = False
         dof_friction = [0, 0.03]
         dof_damping = [0, 0.003]
 
-        randomize_base_mass = True
+        randomize_base_mass = False
         added_mass_range = [-.2, .2]
 
-        push_robots = True
+        push_robots = False
         push_interval_s = 3
         max_push_vel_xy = 1.
 
-        ext_force_robots = True
-        ext_force_vector_6d_range = [[-30,30], [-30,30], [-30,30], [-5,5], [-5,5], [-5,5]]
-        ext_force_interval = 5.0
+        ext_force_robots = False
+        ext_force_vector_6d_range = [[-10,20], [-10,20], [-10,10], [-2,2], [-2,2], [-2,2]]
+        ext_force_interval = 3.0
         ext_force_duration = 0.2
 
 
@@ -243,12 +242,12 @@ class Bolt10Cfg( LeggedRobotCfg ):
             action_rate = -1.e-4
 
             # walking specific rewards
-            feet_air_time = 0. # 5.
+            feet_air_time = 0 # 5.
             stand_still = 0.0
             #feet_stumble
             collision =0.
-            no_fly = 0. # .25
-            feet_contact_forces = -1.e-3 #-1.e-3
+            no_fly = 0 # .25
+            feet_contact_forces = 0 #-1.e-3
             
             #feet_outwards = -5.
             
@@ -266,14 +265,14 @@ class Bolt10Cfg( LeggedRobotCfg ):
             # PBRS rewards
             ori_pb = 5.0
             baseHeight_pb = 2.0
-            jointReg_pb = 2.0
+            jointReg_pb = 1.0
             ankle_jointReg_pb = 0.0
             # energy_pb = 1.0
             action_rate_pb = 0.0
 
-            stand_still_pb = 1.0
-            no_fly_pb = 4.0
-            feet_air_time_pb = 2.5
+            stand_still_pb = 1.0 #1
+            no_fly_pb = 0.0 #4/
+            feet_air_time_pb = 1#2.5
 
 
     class normalization:
@@ -283,11 +282,15 @@ class Bolt10Cfg( LeggedRobotCfg ):
             dof_pos = 1.0
             dof_vel = 0.05
             height_measurements = 5.0
+            com_pos = 10.0
+            feet_contact_forces = 0.05
+            
+
         clip_observations = 100.
         clip_actions = 44.
 
     class noise:
-        add_noise = True
+        add_noise = False
         noise_level = 1.0 # scales other values
         class noise_scales:
             dof_pos = 0.005
@@ -339,16 +342,20 @@ class Bolt10CfgPPO( LeggedRobotCfgPPO ):
         actor_hidden_dims = [512, 256, 128]
         critic_hidden_dims = [512, 256, 128]
         activation = 'elu' # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
-        output_activation = 'elu'
+        encoder_activation='elu'
+        encoder_output_activation='elu'
+        latent_clipping=100              #clipping
+        prop_latent_dim=8          #prop_latent_dim
         # only for 'ActorCriticRecurrent':
         # rnn_type = 'lstm'
         # rnn_hidden_size = 512
         # rnn_num_layers = 1
 
-    class mlp:
+    class student:
         mlp_shape = [512, 256, 128]
-        activation = 'tanh'
-        output_activation = 'tanh',
+        activation = 'elu'
+        encoder_activation = 'elu'
+
     class algorithm( LeggedRobotCfgPPO.algorithm):
         # training params
         value_loss_coef = 1.0
@@ -357,7 +364,7 @@ class Bolt10CfgPPO( LeggedRobotCfgPPO ):
         entropy_coef = 0.01
         num_learning_epochs = 5
         num_mini_batches = 4 # mini batch size = num_envs*nsteps / nminibatches
-        learning_rate = 1.e-3 #5.e-4
+        learning_rate = 1.e-4 #5.e-4
         schedule = 'adaptive' # could be adaptive, fixed
         gamma = 0.99
         lam = 0.95
@@ -375,16 +382,16 @@ class Bolt10CfgPPO( LeggedRobotCfgPPO ):
     #     schedule = 'adaptive'
     #     learning_rate = 1.e-3
     class runner( LeggedRobotCfgPPO.runner ):
-        if rma==True:
+        if rma==True or rma_student==True:
             policy_class_name = 'ActorCriticLatent'
         else:
             policy_class_name = 'ActorCritic'
-        if rma == True:
+        if rma == True or rma_student==True:
             algorithm_class_name = 'PPO_priv'
         else :
             algorithm_class_name = 'PPO_sym'
         num_steps_per_env = 24 # per iteration
-        max_iterations = 10000 # number of policy updates
+        max_iterations = 3000 # number of policy updates
 
         # logging
         save_interval = 100 # check for potential saves every this many iterations
@@ -406,10 +413,10 @@ class Bolt10CfgPPO( LeggedRobotCfgPPO ):
         resume_path = None # updated from load_run and chkpt
         # symmetric loss
     class dagger( LeggedRobotCfgPPO.runner ):
-        expert_policy_class = 'DAggerExpert'
-        student_policy_class = 'DAggerAgent'
+        expert_policy_class_name = 'DaggerExpert'
+        student_policy_class_name = 'DaggerAgent'
 
-        algorithm_class_name='DAggerTrainer'
+        algorithm_class_name='DaggerTrainer'
 
         num_steps_per_env = 24
         max_iterations = 1000

@@ -47,10 +47,10 @@ def play(args):
     env_cfg.terrain.num_cols = 5
     env_cfg.terrain.curriculum = False
     env_cfg.noise.add_noise = True
-    env_cfg.domain_rand.randomize_friction = True
-    env_cfg.domain_rand.push_robots = True
-    env_cfg.domain_rand.ext_force_robots = True
-    env_cfg.domain_rand.randomize_joint_friction = True
+    env_cfg.domain_rand.randomize_friction = False
+    env_cfg.domain_rand.push_robots = False
+    env_cfg.domain_rand.ext_force_robots = False
+    env_cfg.domain_rand.randomize_joint_friction = False
     env_cfg.env.episode_length_s = 20
     
     if args.speed is not None:
@@ -70,6 +70,11 @@ def play(args):
         total_obs = torch.cat((obs,priviledge_obs),dim=1)
     else:
         total_obs = obs
+    
+    if train_cfg_dict['runner_class_name']=='OnPolicyRunnerDagger':
+        history_len = train_cfg_dict["dagger"]["history_len"]
+        history = torch.zeros((env.num_envs, (env.num_obs+env.num_actions)*history_len,))
+        input_history=history
     print("total_obs", total_obs.shape)
     # load policy
     train_cfg.runner.resume = True
@@ -84,8 +89,8 @@ def play(args):
 
     logger = Logger(env.dt)
     robot_index = 0 # which robot is used for logging
-    joint_index = 1 # which joint is used for logging
-    stop_state_log = 100 # number of steps before plotting states
+    joint_index = 2 # which joint is used for logging
+    stop_state_log = 1000 # number of steps before plotting states
     stop_rew_log = env.max_episode_length + 1 # number of steps before print average episode rewards
     camera_position = np.array(env_cfg.viewer.pos, dtype=np.float64)
     camera_vel = np.array([1., 1., 0.])
@@ -93,13 +98,25 @@ def play(args):
     img_idx = 0
 
     for i in range(10*int(env.max_episode_length)):
-        actions = policy(total_obs.detach())
-        obs, priviledge_obs, rews, dones, infos = env.step(actions.detach())
-        if env_cfg.env.num_privileged_obs is not None and train_cfg_dict['runner_class_name']=='OnPolicyRunnerRMA':
-            priviledge_obs = env.get_privileged_observations()
-            total_obs = torch.cat((obs,priviledge_obs),dim=1)
+
+        if train_cfg_dict['runner_class_name']=='OnPolicyRunnerDagger':
+            actions = policy(obs.detach(),input_history.detach())
+            obs, priviledge_obs, rews, dones, infos = env.step(actions.detach())
+            new_history = torch.cat((obs,actions),dim=1)
+            history = history[:,env.num_obs+env.num_actions:]
+            history = torch.cat((history, new_history),dim=1)
+            if i % 10==0:
+                input_history = history
         else:
-            total_obs = obs
+            actions = policy(total_obs.detach())
+            obs, priviledge_obs, rews, dones, infos = env.step(actions.detach())
+            if env_cfg.env.num_privileged_obs is not None and train_cfg_dict['runner_class_name']=='OnPolicyRunnerRMA':
+                priviledge_obs = env.get_privileged_observations()
+                total_obs = torch.cat((obs,priviledge_obs),dim=1)
+            else:
+                total_obs = obs
+
+                
         if RECORD_FRAMES:
             if i % 2:
                 filename = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.experiment_name, 'exported', 'frames', f"{img_idx}.png")
@@ -112,7 +129,7 @@ def play(args):
         if i < stop_state_log:
             logger.log_states(
                 {
-                    'dof_pos_target': actions[robot_index, joint_index].item() * env.cfg.control.action_scale,
+                    'action': actions[robot_index, joint_index].item() * env.cfg.control.action_scale,
                     'dof_pos': env.dof_pos[robot_index, joint_index].item(),
                     'dof_vel': env.dof_vel[robot_index, joint_index].item(),
                     'dof_torque': env.torques[robot_index, joint_index].item(),

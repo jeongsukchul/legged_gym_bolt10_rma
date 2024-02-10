@@ -95,8 +95,8 @@ class Bolt10(LeggedRobot):
         contact_filt = torch.logical_or(contact, self.last_contacts) # [1, 1]
         self.last_contacts = contact # [1, 1]
         first_contact = (self.feet_air_time > 0.) * contact_filt # [1 1]
-        self.feet_air_time += self.dt
-        rew_airTime = torch.sum( torch.clip(self.feet_air_time - 0.3, min=0.0, max=0.7) * first_contact, dim=1) # reward only on first contact with the ground
+        self.feet_air_time += 1  #self.dt
+        rew_airTime = torch.sum( torch.clip(self.feet_air_time - 15, min=0.0, max=35) * first_contact, dim=1) # reward only on first contact with the ground
         rew_airTime *= torch.norm(self.commands[:, :3], dim=1) > 0.1 #no reward for zero command
         rew_airTime *= single_contact #no reward for flying or double support
         self.feet_air_time *= ~contact_filt
@@ -134,7 +134,7 @@ class Bolt10(LeggedRobot):
             ( (self.dof_pos[:, 1] - self.default_dof_pos[:, 1] ) - (self.dof_pos[:, 6] - self.default_dof_pos[:, 6]) )
             / self.cfg.normalization.obs_scales.dof_pos)
         # Pitch joint regularization
-        error +=0.8* self.sqrdexp(
+        error +=0.7* self.sqrdexp(
             ( (self.dof_pos[:, 2]) + (self.dof_pos[:, 7]))
             / self.cfg.normalization.obs_scales.dof_pos)
         
@@ -143,7 +143,7 @@ class Bolt10(LeggedRobot):
         #     ( (self.dof_pos[:, 2]- self.default_dof_pos[:, 2]) + (self.dof_pos[:, 7] - self.default_dof_pos[:, 7]))
         #     / self.cfg.normalization.obs_scales.dof_pos)
         # print("self.dof_pos[0, 6]: ", self.dof_pos[0, 1], "// self.dof_pos[0, 6]: ", self.dof_pos[0, 6])
-        return error/4.8
+        return error/4.7
     def _reward_ankle_joint_regularization(self):
         #ankle joint symmetry
         error = self.sqrdexp(
@@ -272,8 +272,8 @@ class Bolt10(LeggedRobot):
                         force_buckets = torch_rand_float(ext_force_vector_6d_range[i][0], ext_force_vector_6d_range[i][1], (num_buckets,1), device='cpu')
                         bucket_ids = torch.randint(0, num_buckets,(1,))
                         ext_force_vector_6d[i]= force_buckets[bucket_ids]
-                    self.ext_forces[:, 0, 0:3] = torch.tensor(ext_force_vector_6d[:3], device=self.device, requires_grad=False)    #index: root, body, force axis(6)
-                    self.ext_torques[:, 0, 0:3] = torch.tensor(ext_force_vector_6d[3:], device=self.device, requires_grad=False)
+                    self.ext_forces[:, 0, 0:3] = ext_force_vector_6d[:3].detach().clone().to(self.device)    #index: root, body, force axis(6)
+                    self.ext_torques[:, 0, 0:3] = ext_force_vector_6d[3:].detach().clone().to(self.device)
                     
                 else :
                     self.ext_forces = torch.zeros((self.num_envs, self.num_bodies, 3), device=self.device, dtype=torch.float)
@@ -287,7 +287,6 @@ class Bolt10(LeggedRobot):
                 self.gym.fetch_results(self.sim, True)
             self.gym.refresh_dof_state_tensor(self.sim)
         self.post_physics_step()
-
         # return clipped obs, clipped states (None), rewards, dones and infos
         clip_obs = self.cfg.normalization.clip_observations
         self.obs_buf = torch.clip(self.obs_buf, -clip_obs, clip_obs)
@@ -369,30 +368,38 @@ class Bolt10(LeggedRobot):
     def compute_observations(self):
         """ Computes observations
         """
+        feet_contact_forces = self.contact_forces[:,self.feet_indices,2]
+        feet_contact = (self.contact_forces[:,self.feet_indices,2]>1)
+        base_ext_forces = self.ext_forces[:,0].reshape((self.num_envs,-1))
+        base_ext_torques = self.ext_torques[:,0].reshape((self.num_envs,-1))
         self.obs_buf = torch.cat((  
                                     self.base_ang_vel  * self.obs_scales.ang_vel,
                                     self.projected_gravity,
                                     self.commands[:, :3] * self.commands_scale,
                                     (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
                                     self.dof_vel * self.obs_scales.dof_vel,
-                                    self.actions
+                                    self.actions,
+                                    # (self.mass_com- self.base_pos)*self.obs_scales.com_pos,#3
+                                    # feet_contact_forces*self.obs_scales.feet_contact_forces,         #2
+                                    # feet_contact,                #2
+                                    # base_ext_forces/self.cfg.domain_rand.ext_force_vector_6d_range[0][1], #3
+                                    # base_ext_torques/self.cfg.domain_rand.ext_force_vector_6d_range[3][1], #3
                                     ),dim=-1)
+
         
-        feet_contact_forces = self.contact_forces[:,self.feet_indices,2]
-        feet_contact = self.contact_forces[:,self.feet_indices,2]>1
         if self.num_privileged_obs is not None : 
             self.privileged_obs_buf = torch.cat((
-                                        self.mass_com- self.base_pos,#3
-                                        self.friction,               #1
-                                        feet_contact_forces,         #2
+                                        (self.mass_com- self.base_pos)*self.obs_scales.com_pos,#3
+                                        self.base_lin_vel  * self.obs_scales.lin_vel,
+                                        feet_contact_forces*self.obs_scales.feet_contact_forces,         #2
                                         feet_contact,                #2
-                                        self.ext_forces.view((self.num_envs,-1)), #link 11* 3 = 33
-                                        self.ext_torques.view((self.num_envs,-1)) #same 33
+                                        base_ext_forces/self.cfg.domain_rand.ext_force_vector_6d_range[0][1], #link 11* 3 = 33
+                                        base_ext_torques/self.cfg.domain_rand.ext_force_vector_6d_range[3][1], #same 33
                                         ),dim=-1)
-            
+        # print("force",self.ext_forces.reshape((self.num_envs,-1))[0,:3]/self.cfg.domain_rand.ext_force_vector_6d_range[0][1]) #link 11* 3 = 33
+        # print("torque",self.ext_torques.reshape((self.num_envs,-1))[0,:3]/self.cfg.domain_rand.ext_force_vector_6d_range[3][1]) #same 33
         # add noise if needed
-        if self.add_noise:
-            self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+
         # add perceptive inputs if not blind
         if self.cfg.terrain.measure_heights:
             heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements
@@ -400,6 +407,9 @@ class Bolt10(LeggedRobot):
                 self.privileged_obs_buf = torch.cat((self.privileged_obs_buf,heights),dim=-1) #187
             else:
                 self.obs_buf = torch.cat((self.obs_buf, heights), dim=-1)
+        if self.add_noise:
+            self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+        
 
     def _create_ground_plane(self):
         """ Adds a ground plane to the simulation, sets friction and restitution based on the cfg.

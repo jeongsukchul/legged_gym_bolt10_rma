@@ -89,7 +89,7 @@ class LeggedRobot(BaseTask):
         self.actions = torch.clip(actions, -clip_actions, clip_actions).to(self.device) # at reset, action is zero.
         # step physics and render each frame
         self.render()
-
+        
         for _ in range(self.cfg.control.decimation): # compute torque 4 times
             self.torques = self._compute_torques(self.actions).view(self.torques.shape) # zero action means its trying to go to default joint positions. What is the current joint position?
             self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self.torques)) # Now its set as default joint position. So the torque should be 0? Because dof vel is 0
@@ -390,6 +390,7 @@ class LeggedRobot(BaseTask):
             torques = actions_scaled
         else:
             raise NameError(f"Unknown controller type: {control_type}")
+        
         return torch.clip(torques, -self.torque_limits, self.torque_limits)
 
     def _reset_dofs(self, env_ids):
@@ -932,10 +933,11 @@ class LeggedRobot(BaseTask):
         contact_filt = torch.logical_or(contact, self.last_contacts) 
         self.last_contacts = contact
         first_contact = (self.feet_air_time > 0.) * contact_filt
-        self.feet_air_time += self.dt
+        self.feet_air_time += self.dt # self.dt
         rew_airTime = torch.sum((self.feet_air_time - 0.5) * first_contact, dim=1) # reward only on first contact with the ground
         rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.1 #no reward for zero command
         self.feet_air_time *= ~contact_filt
+        
         return rew_airTime
     
     def _reward_stumble(self):
